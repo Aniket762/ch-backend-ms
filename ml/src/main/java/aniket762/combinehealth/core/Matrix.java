@@ -1,16 +1,17 @@
 package aniket762.combinehealth.core;
 
-class Matrix{
-    int rows,cols;
-    float[][] data;
+public class Matrix{
+    public int rows;
+    public int cols;
+    public float[][] data;
 
-    Matrix(int r, int c){
+    public Matrix(int r, int c){
         rows=r;
         cols=c;
         data = new float[r][c];
     }
 
-    static Matrix random(int r, int c){
+    public static Matrix random(int r, int c){
         Matrix m = new Matrix(r,c);
         for(int i=0;i<r;i++){
             for(int j=0;j<c;j++){

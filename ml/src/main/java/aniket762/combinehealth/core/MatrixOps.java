@@ -1,8 +1,8 @@
 package aniket762.combinehealth.core;
 
-class MatrixOps{
+public class MatrixOps{
     // Project embeddings into Q,K,V
-    static Matrix matmul(Matrix A, Matrix B){
+    public static Matrix matmul(Matrix A, Matrix B){
         if(A.cols != B.cols) throw new IllegalArgumentException("Incompatible shapes");
 
         Matrix C = new Matrix(A.rows, B.cols);
@@ -22,7 +22,7 @@ class MatrixOps{
 
     // Residual Connection ( x + attention(x))
     // Training Stabilization
-    static Matrix add(Matrix A, Matrix B){
+    public static Matrix add(Matrix A, Matrix B){
         if(A.rows != B.rows || A.cols!=B.cols) throw new IllegalArgumentException("Incompatible shapes");
 
         Matrix C = new Matrix(A.rows, A.cols);
@@ -35,7 +35,7 @@ class MatrixOps{
     }
 
     // Attention uses Q * Kt
-    static Matrix transpose(Matrix A){
+    public static Matrix transpose(Matrix A){
      Matrix C = new Matrix(A.cols,A.rows);
      for(int i=0;i<A.rows;i++){
          for(int j=0;j<A.cols;j++){
@@ -46,7 +46,7 @@ class MatrixOps{
     }
 
     // Attention weight sum to 1 : Score to P(E)
-    static void softMax(Matrix A){
+    public static void softMax(Matrix A){
         for(int i=0;i<A.rows;i++){
             float max = Float.NEGATIVE_INFINITY;
             for(int j=0;j<A.cols;j++){
@@ -66,7 +66,7 @@ class MatrixOps{
     }
 
     // Stabilize deep stacking -> faster convergence
-    static void layerNorm(Matrix A){
+    public static void layerNorm(Matrix A){
         float epsilon = (float) (1e5-5f);
 
         for(int i=0;i<A.rows;i++){
@@ -90,7 +90,7 @@ class MatrixOps{
         }
     }
 
-    static void relu(Matrix A){
+    public static void relu(Matrix A){
         for(int i=0;i<A.rows;i++){
             for(int j=0;j< A.cols;j++){
                 A.data[i][j] = Math.max(0f, A.data[i][j]);
