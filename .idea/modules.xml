@@ -2,9 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/ch-backend-ms.iml" filepath="$PROJECT_DIR$/.idea/ch-backend-ms.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ml.main.iml" filepath="$PROJECT_DIR$/.idea/modules/ml.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ml.test.iml" filepath="$PROJECT_DIR$/.idea/modules/ml.test.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/combinehealth.main.iml" filepath="$PROJECT_DIR$/.idea/modules/combinehealth.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/combinehealth.test.iml" filepath="$PROJECT_DIR$/.idea/modules/combinehealth.test.iml" />
     </modules>
   </component>
 </project>

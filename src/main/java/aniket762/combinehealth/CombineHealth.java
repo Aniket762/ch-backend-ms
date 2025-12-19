@@ -6,11 +6,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class CombinehealthApplication {
-    private static final Logger logger = LoggerFactory.getLogger(CombinehealthApplication.class);
-
+public class CombineHealth {
+    private static final Logger logger = LoggerFactory.getLogger(CombineHealth.class);
 	public static void main(String[] args) {
-        SpringApplication.run(CombinehealthApplication.class, args);
+        SpringApplication.run(CombineHealth.class, args);
         logger.info("Application ready to serve on port: {}",
                 System.getProperty("server.port","8080"));
 	}
