@@ -8,4 +8,8 @@ import java.util.List;
 @Getter
 public class VectorStore {
     private final List<DocumentChunk> chunks = new ArrayList<>();
+
+    public void add(DocumentChunk documentChunk) {
+        chunks.add(documentChunk);
+    }
 }
