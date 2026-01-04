@@ -1,11 +1,11 @@
 package aniket762.combinehealth.controller;
-
 import aniket762.combinehealth.service.ModelService;
 import aniket762.combinehealth.service.TrainingStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Tag(name="Train Model", description = "Train Model and Fetch Status of Training")
@@ -29,6 +29,10 @@ public class TrainingController {
     @GetMapping("/status")
     public Map<String,String> status(){
         TrainingStatus status = modelService.getStatus();
-        return Map.of("status",status.name(),"error", modelService.getLastError());
+        Map<String,String> resp = new HashMap<>();
+        resp.put("status", status.name());
+        String err = modelService.getLastError();
+        resp.put("error", err == null ? "" : err);
+        return resp;
     }
 }
