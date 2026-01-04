@@ -3,7 +3,7 @@ package aniket762.combinehealth.core;
 public class MatrixOps{
     // Project embeddings into Q,K,V
     public static Matrix matmul(Matrix A, Matrix B){
-        if(A.cols != B.cols) throw new IllegalArgumentException("Incompatible shapes");
+        if(A.cols != B.rows) throw new IllegalArgumentException("Incompatible shapes");
 
         Matrix C = new Matrix(A.rows, B.cols);
 
@@ -36,13 +36,13 @@ public class MatrixOps{
 
     // Attention uses Q * Kt
     public static Matrix transpose(Matrix A){
-     Matrix C = new Matrix(A.cols,A.rows);
-     for(int i=0;i<A.rows;i++){
-         for(int j=0;j<A.cols;j++){
-             C.data[j][i] = C.data[i][j];
-         }
-     }
-     return C;
+        Matrix C = new Matrix(A.cols,A.rows);
+        for(int i=0;i<A.rows;i++){
+            for(int j=0;j<A.cols;j++){
+                C.data[j][i] = A.data[i][j];
+            }
+        }
+        return C;
     }
 
     // Attention weight sum to 1 : Score to P(E)
@@ -67,7 +67,7 @@ public class MatrixOps{
 
     // Stabilize deep stacking -> faster convergence
     public static void layerNorm(Matrix A){
-        float epsilon = (float) (1e5-5f);
+        float epsilon = 1e-5f;
 
         for(int i=0;i<A.rows;i++){
             float mean = 0f;

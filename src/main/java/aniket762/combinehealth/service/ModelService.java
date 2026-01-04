@@ -12,7 +12,6 @@ import aniket762.combinehealth.util.Utils;
 import lombok.Getter;
 import org.springframework.stereotype.Service;
 
-import java.util.Collections;
 import java.util.List;
 
 @Service
@@ -35,6 +34,20 @@ public class ModelService {
         status = TrainingStatus.TRAINING;
         lastError = null;
 
+        // Thread to log ongoing ongoing
+        Thread monitor = new Thread(() -> {
+            try {
+                while (ModelService.this.status == TrainingStatus.TRAINING) {
+                    System.out.println("Training ongoing...");
+                    Thread.sleep(10000);
+                }
+            } catch (InterruptedException ignored) {
+                System.out.println("Monitor interrupted");
+            }
+        });
+        monitor.setDaemon(true);
+        monitor.start();
+
         try{
             System.out.println("Reading article..........");
             String article = Utils.readFromUrl(articleUrl);
@@ -56,18 +69,38 @@ public class ModelService {
                     Config.D_FF
             );
 
-            // train
-            Trainer trainer = new Trainer(model, tokenizer);
-            trainer.train(Collections.singleton(article).toArray(new String[0]),5);
+            // running one forward pass on the first sentence to catch shape errors immediately
+            String[] sentences = article.split("\\.\\s+");
+            if (sentences.length > 0) {
+                int[] sampleTokens = tokenizer.encode(sentences[0]);
+                try {
+                    model.forward(sampleTokens);
+                } catch (Throwable t) {
+                    status = TrainingStatus.FAILED;
+                    lastError = t.getMessage();
+                    t.printStackTrace();
+                    throw t;
+                }
+            }
 
-            // build with RAG Store
+            Trainer trainer = new Trainer(model, tokenizer);
+            try {
+                trainer.train(sentences, 5);
+            } catch (Throwable t) {
+                status = TrainingStatus.FAILED;
+                lastError = t.getMessage();
+                t.printStackTrace();
+                throw t;
+            }
+
             buildVectorStore(article);
             status = TrainingStatus.READY;
             System.out.println("Model Training Completed!!!!");
         }catch (Exception e){
             status = TrainingStatus.FAILED;
-            lastError = e.getMessage();
+            if (lastError == null) lastError = e.getMessage();
             e.printStackTrace();
+            throw e;
         }
     }
 

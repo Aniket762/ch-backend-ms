@@ -14,6 +14,6 @@ public class StartupTrainer implements CommandLineRunner {
 
     @Override
     public void run(String[] args) throws Exception{
-        modelService.trainFromUrl("");
+        modelService.trainFromUrl("https://aeon.co/essays/the-hidden-role-of-pride-and-shame-in-the-human-hive");
     }
 }

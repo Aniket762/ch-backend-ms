@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.util.Objects;
 
 public class Utils {
     public static String readFromUrl(String urlString) throws IOException{
@@ -12,10 +11,12 @@ public class Utils {
         BufferedReader in = new BufferedReader(new InputStreamReader(url.openStream()));
 
         StringBuilder sb = new StringBuilder();
-        String inputLine = "";
+        String inputLine;
 
-        while(Objects.equals(inputLine, in.readLine())) sb.append(inputLine).append(" ");
+        while((inputLine = in.readLine()) != null) {
+            sb.append(inputLine).append(" ");
+        }
         in.close();
-        return sb.toString();
+        return sb.toString().trim();
     }
 }
