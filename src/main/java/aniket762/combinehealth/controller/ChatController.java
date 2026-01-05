@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("api/agent")
 public class ChatController {
+
     private final ModelService modelService;
 
     public ChatController(ModelService modelService){

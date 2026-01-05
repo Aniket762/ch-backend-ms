@@ -7,131 +7,138 @@ import aniket762.combinehealth.rag.Retriver;
 import aniket762.combinehealth.rag.VectorStore;
 import aniket762.combinehealth.tokenizer.BPETrainer;
 import aniket762.combinehealth.tokenizer.Tokenizer;
-import aniket762.combinehealth.training.Trainer;
 import aniket762.combinehealth.util.Utils;
 import lombok.Getter;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class ModelService {
+
     private TransformerDecoder model;
     private Tokenizer tokenizer;
     private Retriver retriver;
+
+    @Getter
+    private volatile boolean ready = false;
     @Getter
     private volatile TrainingStatus status = TrainingStatus.NOT_TRAINED;
-    @Getter
-    private volatile String lastError = null;
 
+    public synchronized void trainFromUrl(String url) throws Exception {
+        System.out.println("Reading article from URL...");
+        String article = Utils.readFromUrl(url);
+        article = Utils.normalize(article);
 
-    // Adding threadSafe lock
-    public synchronized void trainFromUrl(String articleUrl) throws Exception{
-        if(status == TrainingStatus.TRAINING){
-            throw new IllegalStateException("Training already in progress");
-        }
+        // Train BPE tokenizer
+        BPETrainer bpe = new BPETrainer();
+        bpe.train(article, 100);
 
-        status = TrainingStatus.TRAINING;
-        lastError = null;
+        tokenizer = new Tokenizer();
+        tokenizer.loadFromBPE(bpe);
 
-        // Thread to log ongoing ongoing
-        Thread monitor = new Thread(() -> {
-            try {
-                while (ModelService.this.status == TrainingStatus.TRAINING) {
-                    System.out.println("Training ongoing...");
-                    Thread.sleep(10000);
-                }
-            } catch (InterruptedException ignored) {
-                System.out.println("Monitor interrupted");
-            }
-        });
-        monitor.setDaemon(true);
-        monitor.start();
+        model = new TransformerDecoder(
+                100,
+                1,
+                32,
+                2,
+                64
+        );
 
-        try{
-            System.out.println("Reading article..........");
-            String article = Utils.readFromUrl(articleUrl);
+        buildVectorStore(article);
 
-            // Train BPE
-            BPETrainer bpe = new BPETrainer();
-            bpe.train(article, Config.VOCAB_SIZE);
-
-            tokenizer = new Tokenizer();
-            for(String token: bpe.getVocab().keySet()){
-                tokenizer.addToken(token);
-            }
-
-            model = new TransformerDecoder(
-                    Config.VOCAB_SIZE,
-                    Config.NUM_LAYERS,
-                    Config.D_MODEL,
-                    Config.NUM_HEADS,
-                    Config.D_FF
-            );
-
-            // running one forward pass on the first sentence to catch shape errors immediately
-            String[] sentences = article.split("\\.\\s+");
-            if (sentences.length > 0) {
-                int[] sampleTokens = tokenizer.encode(sentences[0]);
-                try {
-                    model.forward(sampleTokens);
-                } catch (Throwable t) {
-                    status = TrainingStatus.FAILED;
-                    lastError = t.getMessage();
-                    t.printStackTrace();
-                    throw t;
-                }
-            }
-
-            Trainer trainer = new Trainer(model, tokenizer);
-            try {
-                trainer.train(sentences, 5);
-            } catch (Throwable t) {
-                status = TrainingStatus.FAILED;
-                lastError = t.getMessage();
-                t.printStackTrace();
-                throw t;
-            }
-
-            buildVectorStore(article);
-            status = TrainingStatus.READY;
-            System.out.println("Model Training Completed!!!!");
-        }catch (Exception e){
-            status = TrainingStatus.FAILED;
-            if (lastError == null) lastError = e.getMessage();
-            e.printStackTrace();
-            throw e;
-        }
+        ready = true;
+        System.out.println("Model is ready!");
     }
 
     private void buildVectorStore(String article){
         VectorStore store = new VectorStore();
 
         String[] chunks = article.split("\\. ");
-        for(String chunk:chunks){
+        for(String chunk : chunks){
             float[] embedding = new float[Config.D_MODEL];
-            store.add(new DocumentChunk(chunk,embedding));
+            int[] tokens = tokenizer.encode(chunk);
+            for(int i=0; i<tokens.length && i<embedding.length; i++){
+                embedding[i] = tokens[i] / 100f;
+            }
+
+            store.add(new DocumentChunk(chunk, embedding));
         }
         retriver = new Retriver(store);
     }
 
-    public String answer(String question){
-        if(status != TrainingStatus.READY){
-            throw new IllegalStateException("Model not read. Status: "+ status);
+
+    public String answer(String question) {
+        if (status != TrainingStatus.READY) {
+            throw new IllegalStateException("Model not ready");
+        }
+
+        question = Utils.normalize(question);
+
+        if (retriver == null) {
+            throw new IllegalStateException("Retriever not initialized");
         }
 
         int[] qTokens = tokenizer.encode(question);
         float[] qEmbedding = new float[Config.D_MODEL];
+        for(int i=0; i<qTokens.length && i<qEmbedding.length; i++){
+            qEmbedding[i] = qTokens[i] / 100f;
+        }
+        List<DocumentChunk> docs = retriver.retrieve(qEmbedding, 3);
 
-        // top 3 closest
-        List<DocumentChunk> docs = retriver.retrieve(qEmbedding,3);
-
-        StringBuilder context = new StringBuilder(question).append(" ");
-        for(DocumentChunk chunk:docs){
-            context.append(chunk.text).append(" ");
+        StringBuilder response = new StringBuilder();
+        for (DocumentChunk chunk : docs) {
+            response.append(chunk.text).append(" ");
         }
 
-        int[] input = tokenizer.encode(context.toString());
-        return model.forward(input).toString();
+        String prompt = response.toString().trim();
+
+        int[] inputTokens = tokenizer.encode(prompt);
+
+        List<Integer> seq = new ArrayList<>();
+        for (int t : inputTokens) seq.add(t);
+
+        int eos = tokenizer.getEosId();
+        int maxNewTokens = 5;
+
+        try {
+            for (int i = 0; i < maxNewTokens; i++) {
+                int[] cur = seq.stream().mapToInt(Integer::intValue).toArray();
+                float[] logits = model.forward(cur).lastRow();
+
+                int next = argmax(logits);
+                if (next == eos) break;
+
+                seq.add(next);
+            }
+        } catch (Exception e) {
+            return prompt;
+        }
+
+        int start = inputTokens.length;
+        if (seq.size() <= start) return prompt;
+
+        int[] outTokens = new int[seq.size() - start];
+        for (int i = start; i < seq.size(); i++) {
+            outTokens[i - start] = seq.get(i);
+        }
+
+        String generated = tokenizer.decode(outTokens);
+
+        return prompt + " " + generated;
+    }
+
+
+    private int argmax(float[] arr) {
+        int idx = 0;
+        float best = Float.NEGATIVE_INFINITY;
+        for (int i = 0; i < arr.length; i++) {
+            if (arr[i] > best) {
+                best = arr[i];
+                idx = i;
+            }
+        }
+        return idx;
     }
 }

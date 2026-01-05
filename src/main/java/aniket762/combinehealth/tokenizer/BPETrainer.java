@@ -1,52 +1,47 @@
 package aniket762.combinehealth.tokenizer;
 
 import lombok.Getter;
-
 import java.util.*;
 
 @Getter
 public class BPETrainer {
-    private Map<String,Integer> vocab = new HashMap<>();
+    private final Map<String, Integer> vocab = new LinkedHashMap<>();
+    private final List<String[]> merges = new ArrayList<>();
 
-    public void train(String text, int vocabSize){
-        List<String> tokens = new ArrayList<>();
-        for(char ch: text.toCharArray()) tokens.add(String.valueOf(ch));
+    public void train(String text, int targetVocabSize) {
+        text = text.toLowerCase();
+        List<List<String>> corpus = new ArrayList<>();
 
-        Map<String,Integer> freq = new HashMap<>();
-        for(String t:tokens) freq.put(t,freq.getOrDefault(t,0)+1);
-
-        while (freq.size()<vocabSize){
-            // Most frequent pair
-            Map<String, Integer> pairs = new HashMap<>();
-            for(int i=0;i<tokens.size()-1;i++){
-                String pair = tokens.get(i) + tokens.get(i+1);
-                pairs.put(pair, pairs.getOrDefault(pair,0)+1);
-            }
-            if(pairs.isEmpty()) break;
-
-            String best = Collections.max(
-                    pairs.entrySet(),
-                    Map.Entry.comparingByValue()
-            ).getKey();
-
-            // merge
-            for(int i=0;i<tokens.size()-1;i++){
-                if((tokens.get(i)+tokens.get(i+1)).equals(best)){
-                    tokens.set(i,best);
-                    tokens.remove(i+1);
-                }
-            }
-
-            // update freq
-            freq.clear();
-            for(String t: tokens) freq.put(t, freq.getOrDefault(t,0)+1);
+        for (String word : text.split("\\s+")) {
+            List<String> chars = new ArrayList<>();
+            for (char c : word.toCharArray()) chars.add(String.valueOf(c));
+            corpus.add(chars);
         }
 
-        // final vocab
-        for(String t: tokens) vocab.put(t,vocab.size());
-    }
+        for (List<String> word : corpus)
+            for (String ch : word) vocab.putIfAbsent(ch, vocab.size());
 
-    public Map<String,Integer> getVocab(){
-        return vocab;
+        while (vocab.size() < targetVocabSize) {
+            Map<String, Integer> pairFreq = new HashMap<>();
+            for (List<String> word : corpus)
+                for (int i = 0; i < word.size() - 1; i++)
+                    pairFreq.put(word.get(i) + " " + word.get(i + 1),
+                            pairFreq.getOrDefault(word.get(i) + " " + word.get(i + 1), 0) + 1);
+
+            if (pairFreq.isEmpty()) break;
+
+            String bestPair = Collections.max(pairFreq.entrySet(), Map.Entry.comparingByValue()).getKey();
+            String[] parts = bestPair.split(" ");
+            merges.add(parts);
+            String merged = parts[0] + parts[1];
+            vocab.putIfAbsent(merged, vocab.size());
+
+            for (List<String> word : corpus)
+                for (int i = 0; i < word.size() - 1; i++)
+                    if (word.get(i).equals(parts[0]) && word.get(i + 1).equals(parts[1])) {
+                        word.set(i, merged);
+                        word.remove(i + 1);
+                    }
+        }
     }
 }

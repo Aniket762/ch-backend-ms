@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class StartupTrainer implements CommandLineRunner {
+
     private final ModelService modelService;
 
     public StartupTrainer(ModelService modelService){
@@ -13,7 +14,8 @@ public class StartupTrainer implements CommandLineRunner {
     }
 
     @Override
-    public void run(String[] args) throws Exception{
-        modelService.trainFromUrl("https://aeon.co/essays/the-hidden-role-of-pride-and-shame-in-the-human-hive");
+    public void run(String[] args) throws Exception {
+        String url = "https://www.uhcprovider.com/en/policies-protocols/commercial-policies/commercial-medical-drug-policies.html";
+        modelService.trainFromUrl(url);
     }
 }
