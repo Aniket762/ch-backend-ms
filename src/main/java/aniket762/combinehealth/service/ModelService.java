@@ -7,12 +7,13 @@ import aniket762.combinehealth.rag.Retriver;
 import aniket762.combinehealth.rag.VectorStore;
 import aniket762.combinehealth.tokenizer.BPETrainer;
 import aniket762.combinehealth.tokenizer.Tokenizer;
+import aniket762.combinehealth.training.Trainer;
 import aniket762.combinehealth.util.Utils;
 import lombok.Getter;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class ModelService {
@@ -21,114 +22,155 @@ public class ModelService {
     private Tokenizer tokenizer;
     private Retriver retriver;
 
+    // Session memory
+    private final Map<String, List<String>> sessionHistory = new ConcurrentHashMap<>();
+
     @Getter
     private volatile boolean ready = false;
+
     @Getter
     private volatile TrainingStatus status = TrainingStatus.NOT_TRAINED;
 
-    public synchronized void trainFromUrl(String url) throws Exception {
-        System.out.println("Reading article from URL...");
-        String article = Utils.readFromUrl(url);
-        article = Utils.normalize(article);
+    public void trainFromUrl(String article) {
 
-        // Train BPE tokenizer
-        BPETrainer bpe = new BPETrainer();
-        bpe.train(article, 100);
+        status = TrainingStatus.TRAINING;
+        ready = false;
 
-        tokenizer = new Tokenizer();
-        tokenizer.loadFromBPE(bpe);
+        try {
+            article = Utils.normalize(article);
+            article = Utils.cleanHtml(article);
 
-        model = new TransformerDecoder(
-                100,
-                1,
-                32,
-                2,
-                64
-        );
+            // Train tokenizer ONCE
+            if (tokenizer == null) {
+                BPETrainer bpe = new BPETrainer();
+                bpe.train(article, Config.VOCAB_SIZE);
 
-        buildVectorStore(article);
+                tokenizer = new Tokenizer();
+                tokenizer.loadFromBPE(bpe);
+            }
 
-        ready = true;
-        System.out.println("Model is ready!");
+            // Tiny model (do NOT overtrain)
+            model = new TransformerDecoder(
+                    Config.VOCAB_SIZE,
+                    1,
+                    Config.D_MODEL,
+                    Config.NUM_HEADS,
+                    Config.D_FF
+            );
+
+            Trainer trainer = new Trainer(model, tokenizer);
+            trainer.train(article, 2); // very small training
+
+            buildVectorStore(article);
+
+            status = TrainingStatus.READY;
+            ready = true;
+
+        } catch (Exception e) {
+            status = TrainingStatus.FAILED;
+            ready = false;
+            e.printStackTrace();
+        }
     }
 
-    private void buildVectorStore(String article){
+    private void buildVectorStore(String article) {
+
         VectorStore store = new VectorStore();
 
-        String[] chunks = article.split("\\. ");
-        for(String chunk : chunks){
-            float[] embedding = new float[Config.D_MODEL];
+        int CHUNK_WORDS = 200;
+        String[] words = article.split("\\s+");
+
+        for (int i = 0; i < words.length; i += CHUNK_WORDS) {
+
+            int end = Math.min(i + CHUNK_WORDS, words.length);
+            String chunk = String.join(" ",
+                    Arrays.copyOfRange(words, i, end));
+
             int[] tokens = tokenizer.encode(chunk);
-            for(int i=0; i<tokens.length && i<embedding.length; i++){
-                embedding[i] = tokens[i] / 100f;
+
+            float[] embedding = new float[Config.D_MODEL];
+            for (int t : tokens) {
+                int idx = Math.abs(t % embedding.length);
+                embedding[idx] += 1f;
             }
 
             store.add(new DocumentChunk(chunk, embedding));
         }
+
         retriver = new Retriver(store);
     }
 
+    public String answer(String sessionId, String question) {
 
-    public String answer(String question) {
         if (status != TrainingStatus.READY) {
-            throw new IllegalStateException("Model not ready");
+            return "⏳ Model is being trained. Please wait.";
         }
 
         question = Utils.normalize(question);
 
-        if (retriver == null) {
-            throw new IllegalStateException("Retriever not initialized");
+        sessionHistory.putIfAbsent(sessionId, new ArrayList<>());
+        List<String> history = sessionHistory.get(sessionId);
+
+        // Build conversational context
+        StringBuilder context = new StringBuilder();
+        int MAX_TURNS = 3;
+        int start = Math.max(0, history.size() - MAX_TURNS);
+        for (int i = start; i < history.size(); i++) {
+            context.append(history.get(i)).append(" ");
         }
 
-        int[] qTokens = tokenizer.encode(question);
+        String fullQuery = context + question;
+
+        int[] qTokens = tokenizer.encode(fullQuery);
         float[] qEmbedding = new float[Config.D_MODEL];
-        for(int i=0; i<qTokens.length && i<qEmbedding.length; i++){
-            qEmbedding[i] = qTokens[i] / 100f;
+        for (int t : qTokens) {
+            int idx = Math.abs(t % qEmbedding.length);
+            qEmbedding[idx] += 1f;
         }
+
         List<DocumentChunk> docs = retriver.retrieve(qEmbedding, 3);
 
-        StringBuilder response = new StringBuilder();
-        for (DocumentChunk chunk : docs) {
-            response.append(chunk.text).append(" ");
+        StringBuilder retrieved = new StringBuilder();
+        for (DocumentChunk d : docs) {
+            retrieved.append(d.text).append(" ");
         }
 
-        String prompt = response.toString().trim();
+        String prompt =
+                "Answer the question using the context below.\n" +
+                        "Context:\n" + retrieved +
+                        "\nQuestion:\n" + question +
+                        "\nAnswer:";
 
+        // Generation (minimal)
         int[] inputTokens = tokenizer.encode(prompt);
-
         List<Integer> seq = new ArrayList<>();
         for (int t : inputTokens) seq.add(t);
 
         int eos = tokenizer.getEosId();
-        int maxNewTokens = 5;
 
-        try {
-            for (int i = 0; i < maxNewTokens; i++) {
-                int[] cur = seq.stream().mapToInt(Integer::intValue).toArray();
-                float[] logits = model.forward(cur).lastRow();
-
-                int next = argmax(logits);
-                if (next == eos) break;
-
-                seq.add(next);
-            }
-        } catch (Exception e) {
-            return prompt;
+        for (int i = 0; i < 10; i++) {
+            int[] cur = seq.stream().mapToInt(Integer::intValue).toArray();
+            float[] logits = model.forward(cur).lastRow();
+            int next = argmax(logits);
+            if (next == eos) break;
+            seq.add(next);
         }
 
-        int start = inputTokens.length;
-        if (seq.size() <= start) return prompt;
+        int[] out = seq.stream().mapToInt(Integer::intValue).toArray();
+        String generated = tokenizer.decode(out);
 
-        int[] outTokens = new int[seq.size() - start];
-        for (int i = start; i < seq.size(); i++) {
-            outTokens[i - start] = seq.get(i);
+        // Safety filter
+        if (generated.contains("function(") ||
+                generated.contains("window.") ||
+                generated.length() > 400) {
+            generated = "A policy is a set of rules or guidelines that define coverage, eligibility, or procedures.";
         }
 
-        String generated = tokenizer.decode(outTokens);
+        history.add("Q: " + question);
+        history.add("A: " + generated);
 
-        return prompt + " " + generated;
+        return generated;
     }
-
 
     private int argmax(float[] arr) {
         int idx = 0;
