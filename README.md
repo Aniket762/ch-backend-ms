@@ -194,3 +194,7 @@ Returns the current training state of the model.
 
 <img width="1845" height="778" alt="image" src="https://github.com/user-attachments/assets/1c58f87b-384c-4daf-aa65-f7554810c8f2" />
 
+## 💪CURL for Query -> Response
+<img width="1586" height="571" alt="image" src="https://github.com/user-attachments/assets/35973206-db3d-4333-ad23-cb43ce804848" />
+
+
