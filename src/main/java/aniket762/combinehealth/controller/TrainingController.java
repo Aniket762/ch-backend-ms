@@ -25,14 +25,14 @@ public class TrainingController {
         return Map.of("status","training_started");
     }
 
-    @Operation(summary = "get status")
-    @GetMapping("/status")
-    public Map<String,String> status(){
-        TrainingStatus status = modelService.getStatus();
-        Map<String,String> resp = new HashMap<>();
-        resp.put("status", status.name());
-        String err = modelService.getLastError();
-        resp.put("error", err == null ? "" : err);
-        return resp;
-    }
+ //   @Operation(summary = "get status")
+   // @GetMapping("/status")
+//    public Map<String,String> status(){
+//        TrainingStatus status = modelService.getStatus();
+//        Map<String,String> resp = new HashMap<>();
+//        resp.put("status", status.name());
+////        String err = modelService.getLastError();
+////        resp.put("error", err == null ? "" : err);
+//        return resp;
+//    }
 }

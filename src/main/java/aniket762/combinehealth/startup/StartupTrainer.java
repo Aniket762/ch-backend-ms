@@ -1,6 +1,7 @@
 package aniket762.combinehealth.startup;
 
 import aniket762.combinehealth.service.ModelService;
+import aniket762.combinehealth.util.Utils;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +15,14 @@ public class StartupTrainer implements CommandLineRunner {
 
     @Override
     public void run(String[] args) throws Exception{
-        modelService.trainFromUrl("https://aeon.co/essays/the-hidden-role-of-pride-and-shame-in-the-human-hive");
+        System.out.println("Starting training...");
+
+        String url = "https://www.uhcprovider.com/en/policies-protocols/commercial-policies/commercial-medical-drug-policies.html";
+        String article = Utils.readFromUrl(url);
+        article = Utils.normalize(article);
+
+        modelService.trainFromUrl(article);
+
+        System.out.println("Training finished. Model READY!");
     }
 }
